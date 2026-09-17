@@ -1,0 +1,86 @@
+# rRNAop_pipeline Configuration File
+# Full-length bacterial rRNA operon analysis pipeline
+
+# Input/Output Paths
+input:
+  pod5_dir: ""                                          # Directory containing POD5 files (for basecalling)
+  fastq_dir: "./"        # Directory containing FASTQ files (if basecalling already done)
+
+output:
+  output_dir: "./results"     # Main output directory
+
+# Basecalling with Dorado (optional)
+basecalling:
+  model: "dna_r10.4.1_e8.2_400bps_sup@v5.2.0"          # Dorado basecalling model
+  device: "auto"                                        # Device for basecalling (cuda:all, cuda:0, cpu, metal, auto)
+  no_trim: "true"                                       # Disable adapter trimming
+  batch_size: 0                                         # Batch size (0 = auto)
+  recursive: "true"                                     # Search for POD5 files recursively
+
+# Demultiplexing with Porechop (optional)
+demultiplexing:
+  barcode_kit: ""                                       # Barcode kit used (e.g., "SQK-RBK114-24")
+  barcode_threshold: 85                                 # Minimum barcode score threshold (0-100)
+
+# Read Filtering with Chopper
+filtering:
+  min_length: 3500                                      # Minimum read length (bp)
+  max_length: 6000                                      # Maximum read length (bp)
+  min_quality: 10                                       # Minimum average quality score
+
+# Clustering Parameters
+clustering:
+  tool: "swarm"                                         # Clustering tool: "vsearch" or "swarm"
+  
+  # ═════════════════════════════════════════════════════
+  # VSEARCH parameters (used when tool = "vsearch")
+  # ═════════════════════════════════════════════════════
+  cluster_identity: 0.99                                # Identity threshold for clustering (0.0-1.0)
+                                                        # 0.97 = 97% identity (species-level)
+                                                        # 0.99 = 99% identity (strain-level)
+  
+  # ═════════════════════════════════════════════════════
+  # SWARM parameters (used when tool = "swarm")
+  # ═════════════════════════════════════════════════════
+  swarm_d: 1                                            # Maximum differences between sequences
+                                                        # d=1:  ~99.7% identity (strain/species level)
+                                                        # d=5:  ~97% identity (species level)
+                                                        # d=13: ~95% identity (genus level)
+  
+  swarm_fastidious: "false"                             # Enable fastidious mode (link low-abundance clusters)
+                                                        # true:  Reduces singletons, links rare variants
+                                                        # false: Faster, more conservative
+  
+  swarm_boundary: 3                                     # Minimum abundance for linking in fastidious mode
+                                                        # Only used when swarm_fastidious: "true"
+                                                        # Range: 1-10 (3 recommended)
+  
+  swarm_no_otu_breaking: "false"                        # Prevent breaking of large OTUs
+                                                        # true:  Keep large clusters intact
+                                                        # false: Allow splitting when appropriate
+  
+  # ═════════════════════════════════════════════════════
+  # Common parameters (both tools)
+  # ═════════════════════════════════════════════════════
+  remove_chimeras: "true"                               # Perform chimera removal before clustering
+
+# Polishing with Medaka (optional)
+polishing:
+  use_medaka: "true"                                    # Enable/disable Medaka polishing
+  medaka_model: "r1041_e82_400bps_sup_v5.2.0"          # Medaka model (must match basecalling model)
+  
+  # Batch parallelism — total CPUs used = polish_jobs × threads_per_job
+  # With 60 threads: 15 jobs × 4 threads = 60 total (recommended)
+  # With 32 threads:  8 jobs × 4 threads = 32 total
+  polish_jobs: 32                                       # Number of OTUs polished concurrently
+  threads_per_job: 2                                    # Threads given to each medaka_consensus call
+  
+  # Medaka internal batch size — higher = fewer Python overhead cycles
+  medaka_batch_size: 200                                # Reads processed per medaka batch (-b flag)
+
+# Taxonomy Assignment
+taxonomy:
+  blast_db: "path-to-DB/rOpDB.fasta"        # Path to BLAST database
+  evalue: 20                                            # BLAST e-value threshold
+  max_target_seqs: 1                                    # Maximum number of BLAST hits per query
+  min_identity: 50                                      # Minimum % identity for BLAST hits (enforced in both blast_reads and taxonomy steps; hits below this threshold are discarded before taxonomy assignment)
