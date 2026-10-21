@@ -51,19 +51,17 @@ The **rRNA-ops Pipeline** is a comprehensive, automated workflow for analyzing f
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-repo/rRNA-ops.git
-cd rRNA-ops
+git https://github.com/anilchauhanhp9/rRNA-ops-pipeline.git
+cd rRNA-ops-pipeline-main
 
 # 2. Install dependencies (see INSTALLATION_GUIDE.md)
 conda env create -f rrna_conda_env.yml
-conda activate rRNA-ops
+conda activate rRNAops-pipeline
 
 # 3. Download rOpDB database
 # download the database from https://www.njmicrobe.org/ropdb
 # make a blast database with "makeblastdb -in sequences.fasta -dbtype nucl -out rOpDB -parse_seqids"
 # give the location of the created DB in the blast_db option as blast_db: "location_of_DB/rOpDB.fasta" 
-wget [rOpDB_URL]/rOpDB.fasta
-makeblastdb -in rOpDB.fasta -dbtype nucl -parse_seqids
 
 # 4. Install Dorado separately (from ONT)
 # See INSTALLATION_GUIDE.md for details
@@ -73,13 +71,18 @@ makeblastdb -in rOpDB.fasta -dbtype nucl -parse_seqids
 
 ```bash
 # 1. Configure pipeline
-cp config.yaml my_config.yaml
-nano my_config.yaml  # Edit paths and parameters
+nano config.yaml  # Edit paths and parameters
 
 # 2. Run the complete pipeline
-./rRNA-ops_pipeline.sh all -c my_config.yaml -t 16
+./rRNA-ops_pipeline.sh all -c config.yaml -t 16
 
-# 3. Check results
+# 3. Run the pipeline with the recommended steps
+./rRNA-ops_pipeline.sh basecall,demultiplex,qc_before_filter,filter,qc_after_filter,blast_reads,metadata -c config.yaml -t 16
+
+# 4. Check results
+ls -lh results/taxonomy/
+
+# 4. Import results to microecoR for downstream figures generation
 ls -lh results/taxonomy/
 ```
 
@@ -97,16 +100,19 @@ ls -lh results/taxonomy/
 |------|-------------|----------|
 | `all` | Run complete pipeline | - |
 | `basecall` | Dorado basecalling | Optional* |
-| `demultiplex` | Porechop demultiplexing | Optional* |
+| `demultiplex` | Porechop demultiplexing | Yes* |
+| `qc_before_filter` | NanoPlot quality control before filtring reads | **Yes** |
 | `filter` | Chopper read filtering | **Yes** |
-| `qc` | NanoPlot quality control | Recommended |
-| `blast_reads` | Pre-clustering BLAST | Optional |
-| `cluster` | Sequence clustering | **Yes** |
+| `qc_after_filter` | NanoPlot quality control after filtring reads | **Yes** |
+| `blast_reads` | Pre-clustering BLAST | Optional** |
+| `cluster` | Sequence clustering | Optional |
 | `polish` | Medaka polishing | Optional |
-| `taxonomy` | BLAST taxonomy assignment | **Yes** |
-| `metadata` | Generate sample metadata | Recommended |
+| `taxonomy` | BLAST taxonomy assignment | Optional*** |
+| `metadata` | Generate sample metadata | **Yes** |
 
 *Skip if starting with basecalled/demultiplexed FASTQ files
+**If not doing clustering, run `blast_reads` step
+***If clustering is carried out, skip the `blast_reads` step and run the `taxonomy` step
 
 ### Options
 
@@ -123,9 +129,8 @@ ls -lh results/taxonomy/
 Use a comma-separated list (no spaces):
 
 ```bash
-./rRNA-ops_pipeline.sh filter,qc,cluster,taxonomy -c config.yaml -t 16
+./rRNA-ops_pipeline.sh basecall,demultiplex,qc_before_filter,filter,qc_after_filter,cluster,taxonomy,metadata -c config.yaml -t 16
 ```
-
 ---
 
 ## Pipeline Steps
@@ -205,6 +210,7 @@ results/
 ## Configuration
 
 ### Minimal config.yaml
+#### Change the location of input pod5/fastq reads, output directory, basecalling, demultiplexing, filtering, clustering, and database paths in the config file
 
 ```yaml
 input:
@@ -225,7 +231,7 @@ clustering:
   remove_chimeras: true
 
 taxonomy:
-  blast_db: "/path/to/rOpDB.fasta"  # included with the pipeline in rOpDB folder, but user can supply their own database by making one with makeblastdb -in sequences.fasta -dbtype nucl -out my_nucl_db -parse_seqids command and giving the location of the created DB in  blast_db: option
+  blast_db: "/path/to/rOpDB.fasta" 
   evalue: 20
   min_identity: 50
 ```
@@ -238,24 +244,39 @@ taxonomy:
 # Starting from POD5 files
 ./rRNA-ops_pipeline.sh all -c config.yaml -t 32
 
-# Results in: results/taxonomy/taxonomy.tsv
 ```
 
-### Example 2: Skip Basecalling & Demultiplexing
+### Example 2: Starting from basecalling (use pod5 files as input) and running clustering [choose clustering method in config file]
 
 ```bash
-# Starting from filtered FASTQ files
-./rRNA-ops_pipeline.sh filter,qc,cluster,taxonomy -c config.yaml -t 16
+# Starting from POD5 files
+./rRNA-ops_pipeline.sh basecall,demultiplex,qc_before_filter,filter,qc_after_filter,cluster,taxonomy,metadata -c config.yaml -t 16
+
 ```
 
-### Example 3: Re-run Clustering with Different Parameters
+### Example 3: Starting from basecalled fastq reads (use fastq files as input) and running clustering [choose clustering method in config file]
 
 ```bash
-# Edit config.yaml clustering parameters
-nano config.yaml
+# Starting from basecalled FASTQ files
+./rRNA-ops_pipeline.sh demultiplex,qc_before_filter,filter,qc_after_filter,cluster,taxonomy,metadata -c config.yaml -t 16
 
-# Re-run clustering and taxonomy
-./rRNA-ops_pipeline.sh cluster,taxonomy -c config.yaml -t 16
+```
+### Example 4: Skip Basecalling & Demultiplexing (use basecalled and demultiplexed fastq files as input) and running clustering [choose clustering method in config file]
+
+```bash
+# Starting from basecalled and demultiplexed FASTQ files
+./rRNA-ops_pipeline.sh qc_before_filter,filter,qc_after_filter,cluster,taxonomy,metadata -c config.yaml -t 16 -c config.yaml -t 16
+```
+
+### Example 5: Skip clustering and using raw pod5 or basecalled fast reads (**recommended**)
+
+```bash
+# Starting from pod5 files
+./rRNA-ops_pipeline.sh basecall,demultiplex,qc_before_filter,filter,qc_after_filter,blast_reads,metadata -c config.yaml -t 16
+
+# Starting from basecalled FASTQ files
+./rRNA-ops_pipeline.sh demultiplex,qc_before_filter,filter,qc_after_filter,blast_reads,metadata -c config.yaml -t 16
+
 ```
 
 ### Optimization Tips
@@ -283,13 +304,6 @@ nano config.yaml
 # Swarm: increase swarm_d
 ```
 
-**Problem:** High chimera rate
-```bash
-# Check if remove_chimeras: true
-# Review PCR conditions
-# Check filtering stringency
-```
-
 **Problem:** Memory errors
 ```bash
 # Reduce thread count
@@ -302,19 +316,22 @@ nano config.yaml
 If you use this pipeline in your research, please cite:
 
 ```
-[Your Citation Here]
+[Citation]
 rRNA-ops Pipeline v1.0
-https://github.com/your-repo/rRNA-ops
+https://github.com/anilchauhanhp9/rRNA-ops-pipeline.git
 ```
 
 **Also cite the tools used:**
 
-- **Dorado:** Oxford Nanopore Technologies
-- **Porechop:** Wick et al. (2017)
-- **VSEARCH:** Rognes et al. (2016)
-- **Swarm:** Mahé et al. (2014)
-- **Medaka:** Oxford Nanopore Technologies
-- **BLAST:** Camacho et al. (2009)
+- **Dorado:** https://github.com/nanoporetech/dorado.git
+- **Porechop:** https://github.com/rrwick/Porechop.git
+- **Nanoplot:** https://github.com/wdecoster/nanoplot
+- **MultiQC:** https://github.com/MultiQC/MultiQC; http://dx.doi.org/10.1093/bioinformatics/btw354
+- **Chopper:** https://github.com/wdecoster/chopper
+- **VSEARCH:** https://peerj.com/articles/2584/
+- **Swarm:** https://peerj.com/articles/593/
+- **Medaka:** https://github.com/nanoporetech/medaka.git
+- **BLAST:** https://link.springer.com/article/10.1186/1471-2105-10-421
 
 ---
 
@@ -329,6 +346,15 @@ https://github.com/your-repo/rRNA-ops
 - Oxford Nanopore Technologies for sequencing technology
 - rOpDB database maintainers
 - Open-source bioinformatics community
+
+### AI Assistance
+
+During the development of this pipeline, **Claude (Anthropic)** was used as an
+AI-assisted programming and documentation tool. Claude was used to assist with
+code generation, debugging, workflow organization, and documentation drafting.
+All AI-assisted output was reviewed, tested, and adapted by the author, who is
+responsible for the final implementation, configuration, scientific decisions,
+and release of the software.
 
 ---
 
